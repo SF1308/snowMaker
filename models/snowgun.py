@@ -1,38 +1,31 @@
 from dataclasses import dataclass
+from .gun_spec import GunSpec
 
-from models.snowgun_type import SnowGunType
-from models.snowgun_config import SNOWGUN_CONFIGS
 
 @dataclass
 class SnowGun:
-    gun_type: SnowGunType # MONO_FLUID or BI_FLUID
+    spec: GunSpec
     water_pressure_bar: float
-    air_pressure_bar: float | None = None  # not used for mono-fluid guns
-    minimum_wet_bulb: float | None = None  # to be filled from config
+    air_pressure_bar: float | None = None
 
     def __post_init__(self):
-        config = SNOWGUN_CONFIGS[self.gun_type]
-
-        wp = config["water_pressure"]
-        if not (wp.min_bar <= self.water_pressure_bar <= wp.max_bar):
+        # validar agua
+        wp = self.spec.water_pressure
+        if not (wp.min <= self.water_pressure_bar <= wp.max):
             raise ValueError(
                 f"Water pressure {self.water_pressure_bar} bar out of range "
-                f"[{wp.min_bar}, {wp.max_bar}] for {self.gun_type.value}"
+                f"[{wp.min}, {wp.max}]"
             )
 
-        ap = config["air_pressure"]
+        # validar aire
+        ap = self.spec.air_pressure
         if ap is None and self.air_pressure_bar is not None:
-            raise ValueError(f"{self.gun_type.value} does not use air pressure")
+            raise ValueError("This gun type does not use air pressure")
         if ap is not None:
             if self.air_pressure_bar is None:
-                raise ValueError(f"{self.gun_type.value} requires air_pressure_bar")
-            if not (ap.min_bar <= self.air_pressure_bar <= ap.max_bar):
+                raise ValueError("This gun type requires air_pressure_bar")
+            if not (ap.min <= self.air_pressure_bar <= ap.max):
                 raise ValueError(
                     f"Air pressure {self.air_pressure_bar} bar out of range "
-                    f"[{ap.min_bar}, {ap.max_bar}] for {self.gun_type.value}"
+                    f"[{ap.min}, {ap.max}]"
                 )
-
-        wet_bulb = config["minimum_wet_bulb"]
-        if wet_bulb is not None:
-            self.minimum_wet_bulb = wet_bulb
-

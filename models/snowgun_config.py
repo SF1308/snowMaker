@@ -1,20 +1,32 @@
-from dataclasses import dataclass
-from models.snowgun_type import SnowGunType
+from .gun_type import GunType
+from .gun_spec import GunSpec
+from .primitives import Range as PressureRange
 
-@dataclass(frozen=True)
-class PressureRange:
-    min_bar: float
-    max_bar: float
+"""
+Lookup table that returns a GunSpec based on the gun type.
 
-SNOWGUN_CONFIGS: dict[SnowGunType, dict] = {
-    SnowGunType.MONO_FLUID: {
-        "water_pressure": PressureRange(min_bar=20.0, max_bar=40.0),
-        "air_pressure":   None,   # not used for mono-fluid guns
-        "minimum_wet_bulb": -2.5,
-    },
-    SnowGunType.BI_FLUID: {
-        "water_pressure": PressureRange(min_bar=5.0,  max_bar=10.0),
-        "air_pressure":   PressureRange(min_bar=4.0,  max_bar=7.0),
-        "minimum_wet_bulb": -0.5,
-    },
+Today the key is GunType (mono_fluid, bi_fluid).
+In the future it can change to a specific manufacturer model (e.g. "TechnoAlpin TS22")
+without needing to modify GunSpec — only the dictionary key would change.
+
+Equivalent in JS/TS: Record<GunType, GunSpec>
+"""
+
+GUN_CONFIGS: dict[GunType, GunSpec] = {
+    GunType.MONO_FLUID: GunSpec(
+        gun_type=GunType.MONO_FLUID,
+        nozzle_count=6,
+        height_m=12.0,
+        water_pressure=PressureRange(min=20.0, max=40.0),
+        air_pressure=None,
+        minimum_wet_bulb=-2.5,
+    ),
+    GunType.BI_FLUID: GunSpec(
+        gun_type=GunType.BI_FLUID,
+        nozzle_count=4,
+        height_m=8.0,
+        water_pressure=PressureRange(min=5.0, max=10.0),
+        air_pressure=PressureRange(min=4.0, max=7.0),
+        minimum_wet_bulb=-0.5,
+    ),
 }

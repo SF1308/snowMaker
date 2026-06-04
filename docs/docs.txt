@@ -1,3 +1,14 @@
 why dataClass ?
 
 Fórmula de Stull para calcular wb
+
+Presión atmosferica
+
+
+## gun_config.py
+
+Lookup table: dado un tipo de cañón, devuelve su configuración técnica (GunSpec).
+Hoy la key es el tipo (mono/bi-fluid).
+En el futuro puede ser el modelo del fabricante sin necesidad de tocar GunSpec.
+
+Equivalente en JS: Record<GunType, GunSpec>

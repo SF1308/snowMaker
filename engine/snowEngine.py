@@ -10,7 +10,7 @@ class SnowEngine:
 
         wet_bulb = self.wet_bulb_calculator.calculate(weather)
 
-        can_make_snow = wet_bulb <= snowgun.minimum_wet_bulb
+        can_make_snow = wet_bulb <= snowgun.spec.minimum_wet_bulb
 
         return SimulationResult(
             wet_bulb=wet_bulb,
