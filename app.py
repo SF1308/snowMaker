@@ -3,9 +3,8 @@ import streamlit as st
 from ui.weather import render_weather
 from ui.snowgun import render_snowgun
 
-from engine.snowEngine import SnowEngine
+from engine import SnowEngine
 
-from calculators.wet_bulb_calculator import WetBulbCalculator
 
 st.title("Snow Maker Simulator")
 
