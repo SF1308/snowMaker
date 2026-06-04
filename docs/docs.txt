@@ -1,0 +1,3 @@
+why dataClass ?
+
+Fórmula de Stull para calcular wb
