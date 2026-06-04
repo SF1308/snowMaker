@@ -1,33 +1,21 @@
 import streamlit as st
-from models.weather import Weather
+
+from ui.weather import render_weather
+from ui.snowgun import render_snowgun
 
 from calculators.wet_bulb_calculator import WetBulbCalculator
 
 st.title("Snow Maker Simulator")
 
-temperature = st.slider(
-    "Temperature (°C)",
-    min_value=-20.0,
-    max_value=10.0,
-    value=-5.0,
-)
-st.write(f"Temperature: {temperature} °C")
+left_col, right_col = st.columns(2)
 
-humidity = st.slider(
-    "Relative Humidity (%)",
-    min_value=0.0,
-    max_value=100.0,
-    value=50.0,
-)
+with left_col:
+    weather = render_weather()
 
-st.write(f"Humidity: {humidity} %")
+with right_col:
+    snowgun = render_snowgun()
 
 calculator = WetBulbCalculator()
-
-weather = Weather(
-    temperature=temperature,
-    humidity=humidity,
-)
 
 wet_bulb = calculator.calculate(weather)
 
@@ -37,8 +25,8 @@ if "samples" not in st.session_state:
 if st.button("Add Sample"):
     st.session_state.samples.append(
         {
-            "temperature": temperature,
-            "humidity": humidity,
+            "temperature": weather.temperature,
+            "humidity": weather.humidity,
             "wet_bulb": wet_bulb,
         }
     )
