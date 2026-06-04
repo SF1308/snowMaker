@@ -3,6 +3,8 @@ import streamlit as st
 from ui.weather import render_weather
 from ui.snowgun import render_snowgun
 
+from engine.snowEngine import SnowEngine
+
 from calculators.wet_bulb_calculator import WetBulbCalculator
 
 st.title("Snow Maker Simulator")
@@ -15,20 +17,20 @@ with left_col:
 with right_col:
     snowgun = render_snowgun()
 
-calculator = WetBulbCalculator()
+engine = SnowEngine()
 
-wet_bulb = calculator.calculate(weather)
+result = engine.simulate(
+    weather=weather,
+    snowgun=snowgun,
+)
 
-if "samples" not in st.session_state:
-    st.session_state.samples = []
+st.divider()
 
-if st.button("Add Sample"):
-    st.session_state.samples.append(
-        {
-            "temperature": weather.temperature,
-            "humidity": weather.humidity,
-            "wet_bulb": wet_bulb,
-        }
-    )
+st.subheader("Simulation")
 
-st.table(st.session_state.samples)
+st.write(f"Wet Bulb Temperature: {result.wet_bulb:.2f} °C")
+
+if result.can_make_snow:
+    st.success("Snow production is possible.")
+else:
+    st.error("Snow production is not possible.")

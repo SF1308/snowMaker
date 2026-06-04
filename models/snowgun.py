@@ -5,9 +5,10 @@ from models.snowgun_config import SNOWGUN_CONFIGS
 
 @dataclass
 class SnowGun:
-    gun_type: SnowGunType # MONO_FLUID o BI_FLUID
+    gun_type: SnowGunType # MONO_FLUID or BI_FLUID
     water_pressure_bar: float
-    air_pressure_bar: float | None = None  # None para monofluido
+    air_pressure_bar: float | None = None  # not used for mono-fluid guns
+    minimum_wet_bulb: float | None = None  # to be filled from config
 
     def __post_init__(self):
         config = SNOWGUN_CONFIGS[self.gun_type]
@@ -30,3 +31,8 @@ class SnowGun:
                     f"Air pressure {self.air_pressure_bar} bar out of range "
                     f"[{ap.min_bar}, {ap.max_bar}] for {self.gun_type.value}"
                 )
+
+        wet_bulb = config["minimum_wet_bulb"]
+        if wet_bulb is not None:
+            self.minimum_wet_bulb = wet_bulb
+

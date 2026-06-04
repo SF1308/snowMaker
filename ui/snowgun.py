@@ -1,5 +1,3 @@
-# ui/snowgun.py
-
 import streamlit as st
 
 from models.snowgun import SnowGun
@@ -35,8 +33,10 @@ def render_snowgun() -> SnowGun:
             value=float(config["air_pressure"].min_bar),
         )
 
+
     return SnowGun(
         gun_type=gun_type,
         water_pressure_bar=water_pressure,
         air_pressure_bar=air_pressure,
+        minimum_wet_bulb=config["minimum_wet_bulb"],
     )
