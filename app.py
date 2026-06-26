@@ -5,7 +5,7 @@ from ui.weather import render_weather
 from ui.snowgun import render_snowgun
 from ui.styles import inject
 from ui.tooltips import TIPS, tip, metric_card, section_header, chart_label
-from ui.charts import wet_bulb_gauge, production_bar, quality_radar, energy_pie
+from ui.charts import wet_bulb_gauge, production_bar, quality_bars, energy_pie
 
 # ── Page config ────────────────────────────────────────────────
 st.set_page_config(
@@ -185,8 +185,8 @@ with charts_tab:
 
         qual_col, ener_col = st.columns(2, gap="large")
         with qual_col:
-            chart_label("Perfil de calidad de nieve", *TIPS["chart_radar"])
-            st.plotly_chart(quality_radar(q), use_container_width=True)
+            chart_label("Calidad de nieve", *TIPS["chart_radar"])
+            st.plotly_chart(quality_bars(q), use_container_width=True)
         with ener_col:
             chart_label("Distribución de consumo", *TIPS["chart_pie"])
             st.plotly_chart(energy_pie(e), use_container_width=True)

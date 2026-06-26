@@ -1,12 +1,10 @@
 """
 ui/charts.py
 Plotly figure factories for the Snow Maker Simulator.
-
-Each function receives the relevant result dataclass and returns a go.Figure
-ready to be passed to st.plotly_chart().
 """
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from calculators.production import ProductionResult
 from calculators.quality import QualityResult
@@ -105,46 +103,184 @@ def production_bar(p: ProductionResult) -> go.Figure:
     return fig
 
 
-def quality_radar(q: QualityResult) -> go.Figure:
-    """Radar chart normalising crystal size (inverted), density and grade to 0–100."""
-    grain_norm = max(0, (0.8 - q.grain_size_mm) / (0.8 - 0.2) * 100)
-    density_norm = (q.density_kgm3 - 280) / (450 - 280) * 100
-    grade_norm = {"A": 100, "B": 60, "C": 30, "—": 0}.get(q.grade, 0)
+def quality_bars(q: QualityResult) -> go.Figure:
+    """
+    Two horizontal bullet bars on their real scales:
+      - Tamaño de cristal: 0.2 mm (fino/mejor) → 0.8 mm (grueso/peor)  [invert=True]
+      - Densidad:        280 kg/m³ (blanda/peor) → 450 kg/m³ (densa/mejor)
+    Each metric has its own x-axis via make_subplots so scales don't interfere.
+    """
+    # (label, value, vmin, vmax, left_label, right_label, invert)
+    # invert=True → lower value is better; bar fills from the right
+    subplot_rows = [
+        (
+            "Tamaño de cristal",
+            q.grain_size_mm,
+            0.2,
+            0.8,
+            "0.2 mm  fino",
+            "grueso  0.8 mm",
+            True,
+        ),
+        (
+            "Densidad",
+            q.density_kgm3,
+            280,
+            450,
+            "280 kg/m³  blanda",
+            "densa  450 kg/m³",
+            False,
+        ),
+    ]
 
-    cats = ["Tamaño cristal<br>(inv.)", "Densidad", "Calificación"]
-    vals = [grain_norm, density_norm, grade_norm]
+    fig = make_subplots(rows=2, cols=1, vertical_spacing=0.32)
 
-    fig = go.Figure(
-        go.Scatterpolar(
-            r=vals + [vals[0]],
-            theta=cats + [cats[0]],
-            fill="toself",
-            fillcolor="rgba(88,166,255,0.15)",
-            line=dict(color="#58a6ff", width=2),
-            marker=dict(color="#58a6ff", size=6),
+    for row_idx, (label, value, vmin, vmax, lt, rt, invert) in enumerate(
+        subplot_rows, start=1
+    ):
+        span = vmax - vmin
+        pct = (value - vmin) / span
+        good_pct = (1 - pct) if invert else pct
+        bar_color = (
+            "#3fb950"
+            if good_pct > 0.66
+            else ("#d29922" if good_pct > 0.33 else "#f85149")
         )
-    )
+        xref = "x" if row_idx == 1 else "x2"
+        yref = "y" if row_idx == 1 else "y2"
+
+        # background track
+        fig.add_trace(
+            go.Bar(
+                x=[span],
+                base=vmin,
+                orientation="h",
+                marker=dict(color="#1c2230", line=dict(width=0)),
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=row_idx,
+            col=1,
+        )
+
+        # filled bar
+        if invert:
+            fig.add_trace(
+                go.Bar(
+                    x=[vmax - value],
+                    base=value,
+                    orientation="h",
+                    marker=dict(color=bar_color, line=dict(width=0)),
+                    showlegend=False,
+                    hovertemplate=f"<b>{label}</b>: {value:.2f}<extra></extra>",
+                ),
+                row=row_idx,
+                col=1,
+            )
+        else:
+            fig.add_trace(
+                go.Bar(
+                    x=[value - vmin],
+                    base=vmin,
+                    orientation="h",
+                    marker=dict(color=bar_color, line=dict(width=0)),
+                    showlegend=False,
+                    hovertemplate=f"<b>{label}</b>: {value:.2f}<extra></extra>",
+                ),
+                row=row_idx,
+                col=1,
+            )
+
+        # value marker line
+        fig.add_shape(
+            type="line",
+            x0=value,
+            x1=value,
+            y0=-0.45,
+            y1=0.45,
+            line=dict(color="#e6edf3", width=2),
+            xref=xref,
+            yref=yref,
+        )
+
+        # value label above the marker
+        fig.add_annotation(
+            x=value,
+            y=0.52,
+            xref=xref,
+            yref=yref,
+            text=f"<b>{value:.2f}</b>",
+            showarrow=False,
+            font=dict(family=_FONT, size=12, color="#e6edf3"),
+            xanchor="center",
+        )
+
+        # row label (top-left)
+        fig.add_annotation(
+            x=vmin,
+            y=0.52,
+            xref=xref,
+            yref=yref,
+            text=label.upper(),
+            showarrow=False,
+            font=dict(family=_FONT, size=9, color=_TEXT),
+            xanchor="left",
+        )
+
+        # scale endpoint labels (below bar)
+        fig.add_annotation(
+            x=vmin,
+            y=-0.58,
+            xref=xref,
+            yref=yref,
+            text=lt,
+            showarrow=False,
+            font=dict(family="Barlow, sans-serif", size=9, color=_TEXT),
+            xanchor="left",
+        )
+        fig.add_annotation(
+            x=vmax,
+            y=-0.58,
+            xref=xref,
+            yref=yref,
+            text=rt,
+            showarrow=False,
+            font=dict(family="Barlow, sans-serif", size=9, color=_TEXT),
+            xanchor="right",
+        )
+
+        # per-subplot axis config
+        axis_key = "xaxis" if row_idx == 1 else "xaxis2"
+        yaxis_key = "yaxis" if row_idx == 1 else "yaxis2"
+        fig.update_layout(
+            **{
+                axis_key: dict(
+                    range=[vmin, vmax],
+                    showgrid=False,
+                    showticklabels=False,
+                    zeroline=False,
+                ),
+                yaxis_key: dict(
+                    range=[-0.7, 0.7],
+                    showgrid=False,
+                    showticklabels=False,
+                    zeroline=False,
+                ),
+            }
+        )
+
     fig.update_layout(
-        **_BASE,
+        paper_bgcolor=_PAPER,
+        plot_bgcolor=_BG,
+        font=dict(family=_FONT, color=_TEXT, size=11),
+        margin=dict(t=40, b=20, l=10, r=10),
+        height=260,
+        barmode="overlay",
         title={
             "text": "CALIDAD DE NIEVE",
             "font": {"size": 11, "color": _TEXT},
             "x": 0,
         },
-        polar=dict(
-            bgcolor="#161b22",
-            radialaxis=dict(
-                range=[0, 100],
-                gridcolor=_GRID,
-                tickfont={"size": 9, "color": _TEXT},
-                showticklabels=True,
-                tickvals=[25, 50, 75, 100],
-            ),
-            angularaxis=dict(
-                gridcolor=_GRID, tickfont={"size": 10, "color": "#e6edf3"}
-            ),
-        ),
-        height=300,
     )
     return fig
 
