@@ -4,29 +4,22 @@ from models.weather import Weather
 
 
 class WetBulbCalculator:
-  def calculate(self, weather: Weather) -> float:
+    def calculate(self, weather: Weather) -> float:
         temperature = weather.temperature
         relative_humidity = weather.humidity
 
+        # Presión atmosférica estándar (hPa)
+        # TODO: reemplazar por un valor real proveniente de la estación meteorológica.
+        atmospheric_pressure = 1013.25
+
         return (
-            temperature
-            * math.atan(
-                0.151977
-                * math.sqrt(relative_humidity + 8.313659)
-            )
-            + math.atan(
-                temperature + relative_humidity
-            )
-            - math.atan(
-                relative_humidity - 1.676331
-            )
+            temperature * math.atan(0.151977 * math.sqrt(relative_humidity + 8.313659))
+            + math.atan(temperature + relative_humidity)
+            - math.atan(relative_humidity - 1.676331)
             + (
                 0.00391838
                 * relative_humidity**1.5
-                * math.atan(
-                    0.023101 * relative_humidity
-                )
+                * math.atan(0.023101 * relative_humidity)
             )
             - 4.686035
         )
-
