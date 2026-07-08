@@ -1,6 +1,7 @@
 import streamlit as st
 
 from engine import SnowEngine
+from ui.footer import render_footer
 from ui.weather import render_weather
 from ui.snowgun import render_snowgun
 from ui.styles import inject
@@ -201,3 +202,5 @@ st.markdown(
     "Valores estimados — no usar para operaciones críticas</p>",
     unsafe_allow_html=True,
 )
+
+render_footer()
