@@ -1,7 +1,5 @@
 # Introducción al nivocultivo
 
-## ¿Qué es el nivocultivo?
-
 El **nivocultivo** (también conocido como **fabricación de nieve artificial** o *snowmaking*) es el proceso mediante el cual se produce nieve utilizando agua y condiciones meteorológicas favorables.
 
 Aunque comúnmente se la llama "nieve artificial", en realidad está compuesta por agua congelada, al igual que la nieve natural. La diferencia radica en **cómo se forma**.
@@ -131,25 +129,19 @@ Estos valores son aproximados y pueden variar según el tipo de equipo utilizado
 
 # Tipos de equipos
 
-Existen dos tecnologías ampliamente utilizadas para fabricar nieve.
+Al hablar de cañones de nieve, en realidad hay **dos preguntas distintas** que conviene no mezclar, porque cada una responde algo diferente sobre el equipo.
 
-## Cañones con ventilador (Fan Gun)
+## ¿Cómo se proyecta el agua?
 
-Utilizan un gran ventilador para proyectar el agua a larga distancia.
+* **Cañones con ventilador (Fan Gun):** utilizan un gran ventilador para proyectar el agua a larga distancia. Son los equipos más comunes en grandes centros de esquí debido a su elevada capacidad de producción.
+* **Lanzas de nieve (Snow Lance):** son estructuras altas y estáticas, sin ventilador, que pulverizan agua desde una serie de boquillas. Aprovechan la altura de la torre para darle tiempo de vuelo a las gotas. Su consumo energético suele ser menor, aunque normalmente producen menos nieve por unidad que un cañón con ventilador.
 
-Son los equipos más comunes en grandes centros de esquí debido a su elevada capacidad de producción.
+## ¿Cómo se atomiza el agua?
 
-Generalmente requieren condiciones meteorológicas más frías para funcionar con máxima eficiencia.
+* **Mono-fluido:** el agua se pulveriza únicamente con presión de agua, sin necesitar aire comprimido.
+* **Bi-fluido:** el agua se mezcla con aire comprimido en la boquilla. La expansión de ese aire genera un enfriamiento adicional que ayuda a formar los primeros núcleos de hielo, permitiendo trabajar en condiciones algo menos favorables (bulbo húmedo más alto) que un sistema mono-fluido.
 
----
-
-## Lanzas de nieve (Snow Lance)
-
-Son estructuras altas que pulverizan agua desde una serie de boquillas.
-
-Algunos modelos utilizan aire comprimido para generar gotas más finas, lo que les permite trabajar en condiciones algo menos favorables.
-
-Su consumo energético suele ser menor, aunque normalmente producen menos nieve por unidad que un cañón con ventilador.
+Estos dos ejes son independientes entre sí: un cañón con ventilador puede ser mono-fluido o bi-fluido, y una lanza también. Este simulador modela específicamente el eje mono-fluido/bi-fluido, porque es el que determina las condiciones climáticas mínimas necesarias para operar cada sistema.
 
 ---
 
@@ -187,6 +179,7 @@ El principal impacto ambiental del nivocultivo está asociado al consumo de ener
 
 En muchos países donde el nivocultivo está ampliamente desarrollado, la captación de agua y la operación de estos sistemas están sujetas a normativas ambientales y controles específicos para garantizar un uso sostenible del recurso.
 
+---
 
 # ¿Qué simula este proyecto?
 
@@ -205,3 +198,7 @@ Su objetivo es mostrar cómo influyen distintas variables sobre la producción d
 Los modelos utilizados son aproximaciones simplificadas que permiten comprender el funcionamiento general del nivocultivo.
 
 No reemplazan las herramientas profesionales empleadas por los centros de esquí para la operación diaria de sus sistemas de fabricación de nieve.
+
+---
+
+¿Te interesa cómo se calculan exactamente estas condiciones (fórmulas, parámetros, umbrales)? Pasá a **Architecture**. ¿Sos programador y te interesa cómo está construido el proyecto? Pasá a **Technical**.

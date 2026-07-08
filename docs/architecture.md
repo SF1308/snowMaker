@@ -1,127 +1,131 @@
-# Arquitectura del proyecto
+# Architecture: cómo calcula el simulador
 
-## Filosofía general
+Acá está el detalle de qué fórmula usa cada paso del cálculo, con qué parámetros, y en qué orden el motor (`SnowEngine`) los encadena.
 
-El proyecto sigue una arquitectura en capas con **responsabilidad única por módulo**. La idea central: cada calculador responde **una sola pregunta**, no conoce a los demás calculadores, y el motor (`engine`) es el único que los orquesta. Esto permite testear, reemplazar o extender cada pieza sin tocar el resto.
+## 1. Bulbo húmedo — fórmula de Stull (2011)
 
-```
-INPUTS (models)  →  CALCULATORS  →  ENGINE  →  RESULT  →  UI (Streamlit)
-```
-
-## Capas
-
-### 1. Models — datos puros, sin lógica
+El simulador no usa tablas psicrométricas ni necesita presión atmosférica: aproxima el bulbo húmedo (Tw) directamente a partir de temperatura seca (T, °C) y humedad relativa (RH, %) con la fórmula empírica de Stull:
 
 ```
-models/
-├── weather.py          # Weather: temperature, humidity, wind_speed
-├── snowgun.py           # SnowGun: spec + presiones actuales, valida rangos
-├── gun_spec.py          # GunSpec: configuración técnica de un tipo de cañón
-├── gun_type.py          # GunType: enum mono_fluid | bi_fluid
-├── primitives.py        # Range: min/max genérico reusable
-├── snowgun_config.py    # GUN_CONFIGS: lookup GunType → GunSpec
-└── output/
-    └── simulation_result.py   # SimulationResult: resultado final agregado
+Tw = T·atan(0.151977·√(RH + 8.313659))
+   + atan(T + RH)
+   − atan(RH − 1.676331)
+   + 0.00391838·RH^1.5·atan(0.023101·RH)
+   − 4.686035
 ```
 
-Todos son `@dataclass`. La razón (ver también `docs/docs.txt`):
+Es un ajuste por regresión, no una derivación física — funciona bien en rangos meteorológicos normales, pero pierde precisión en extremos (RH cercano a 0% o 100%, temperaturas muy extremas). Tampoco corrige por altitud: fue calibrada a presión atmosférica estándar a nivel del mar, así que en pistas de esquí a gran altura introduce un margen de error que hoy el simulador no compensa.
 
-- **Menos código repetitivo**: no hace falta escribir `__init__` a mano para clases que son, en esencia, contenedores de datos.
-- **Comparación e impresión gratis**: `__eq__` y `__repr__` autogenerados, útil para tests y debugging.
-- **Inmutabilidad opcional**: `@dataclass(frozen=True)` en `GunSpec`, `Range` y los resultados de calculadores — una vez creado un `GunSpec`, no se puede mutar por accidente en medio de una simulación.
-- **Validación explícita**: `SnowGun` no es `frozen` porque necesita `__post_init__` para validar que las presiones ingresadas estén dentro del rango permitido por su `GunSpec`. Es el único modelo con lógica, y esa lógica es *solo* validación, no cálculo.
+Este valor de Tw es la entrada principal de casi todo lo que sigue.
 
-### 2. Calculators — una pregunta cada uno
+## 2. Umbrales de viabilidad
 
-```
-calculators/
-├── wet_bulb_calculator.py   # ¿Cuál es el bulbo húmedo? (Stull)
-├── viability.py             # ¿Se puede hacer nieve con este Tw?
-├── production.py            # ¿Cuánta nieve por hora?
-├── quality.py               # ¿Qué calidad de nieve?
-└── energy.py                # ¿Cuánta energía consume el sistema?
-```
+A partir de Tw, se decide si se puede operar y en qué régimen:
 
-Ningún calculator importa a otro. `WetBulbCalculator` no sabe que existe `ViabilityCalculator`; simplemente devuelve un `float`. Es el `engine` quien encadena las salidas de uno como entrada del siguiente (por ejemplo, `wet_bulb` es entrada tanto de `viability` como de `quality`).
+| Bulbo húmedo (Tw) | Zona | ¿Se puede fabricar nieve? | Resultado esperado |
+|---|---|---|---|
+| Tw > −2°C | `impossible` | No | — |
+| −5°C < Tw ≤ −2°C | `marginal` | Sí | Nieve húmeda y pesada, rendimiento reducido |
+| Tw ≤ −5°C | `optimal` | Sí | Nieve seca, alta calidad |
 
-Cada calculator devuelve su propio `*Result` (dataclass frozen), no un dict genérico — esto da autocompletado y chequeo de tipos en el resto del código.
+Estos umbrales son estándares de industria, no específicos de un fabricante — representan el punto en que la evaporación ya no compensa lo suficiente como para congelar bien las gotas en el aire.
 
-> `calculators/efficiency.py` existe como archivo pero está vacío — es el próximo calculator a implementar (probablemente eficiencia hídrica/energética combinada, a diferenciar de `energy.py` que ya calcula consumo eléctrico puro).
+## 3. Producción de nieve
 
-### 3. Engine — el orquestador
+La producción depende del caudal de agua, que a su vez depende de la presión y de la cantidad de boquillas del cañón:
 
 ```
-engine/
-├── snowEngine.py         # SnowEngine.simulate(weather, snowgun) → SimulationResult
-└── __init__.py           # re-exporta SnowEngine
+Q (L/min) = K × nozzles × √(presión en bar)
 ```
 
-`SnowEngine` instancia todos los calculators en su `__init__` y en `simulate()` los llama en orden, pasando los resultados intermedios donde corresponde:
+donde `K = 2.8` es un coeficiente empírico (litros por minuto por boquilla a 1 bar de referencia).
 
-```python
-wet_bulb   = wet_bulb_calculator.calculate(weather)
-viability  = viability_calculator.calculate(wet_bulb)
-production = production_calculator.calculate(snowgun)
-quality    = quality_calculator.calculate(wet_bulb)
-energy     = energy_calculator.calculate(snowgun, production.water_flow_lpm, production.snow_volume_m3h)
-```
+A partir de ahí:
 
-Es la **única** clase que conoce el orden de dependencias entre calculators. Si mañana `quality` necesitara también `production`, el cambio se hace acá y en ningún otro lado.
+- **Volumen de nieve por hora:** se asume que 1 L de agua produce ~3 L de nieve compactada (`WATER_TO_SNOW_VOLUME = 3.0`).
+- **Masa de nieve por hora:** el volumen se multiplica por una densidad típica de nieve artificial de **350 kg/m³**.
 
-> Existe también `main.py` que instancia `WetBulbCalculator` directamente, sin pasar por `SnowEngine` — es el punto de entrada mínimo por CLI, útil para debugging rápido de la fórmula de Stull sin levantar Streamlit. Nota: hoy importa `SnowmakingEngine` desde `engine.snowmaking_engine`, que no coincide con el archivo real `engine/snowEngine.py` — es un import a corregir.
+Notá que esta parte del cálculo depende del **cañón** (boquillas, presión), no directamente del clima — es decir, un día muy frío no produce automáticamente más nieve; produce **mejor calidad** de nieve, pero el volumen depende de cuánta agua estés bombeando.
 
-### 4. UI — Streamlit
+## 4. Calidad de la nieve
+
+Acá sí vuelve a entrar Tw. La lógica es: cuanto más frío el bulbo húmedo, más chicos son los cristales de hielo formados y más densa/compacta resulta la nieve:
 
 ```
-ui/
-├── weather.py    # render_weather() → Weather (sliders de temp/humedad/viento)
-└── snowgun.py    # render_snowgun() → SnowGun (selectbox de tipo + sliders de presión)
-
-app.py            # arma la página, llama a los render_*, instancia SnowEngine, muestra resultado
+grain_mm  ≈ 0.8 − 0.06 × |Tw|     (acotado entre 0.2 y 0.8 mm)
+density   ≈ 280 + 12 × |Tw|       (acotado entre 280 y 450 kg/m³)
 ```
 
-Cada `render_*` de `ui/` devuelve directamente un modelo de dominio (`Weather`, `SnowGun`), no un dict de valores sueltos. `app.py` no conoce sliders ni valores por defecto — solo orquesta: "pedile a la UI un Weather y un SnowGun, pasáselos al engine, mostrá el resultado". Esto significa que se podría reemplazar Streamlit por otra interfaz (CLI, API REST) reutilizando el 100% de `models/`, `calculators/` y `engine/`.
+Y el grado de calidad se asigna directamente por los mismos umbrales de viabilidad:
 
-## Patrón de configuración: lookup table
+| Grado | Condición | Descripción |
+|---|---|---|
+| **A** | Tw ≤ −5°C | Nieve seca, cristales finos, alta densidad |
+| **B** | −5°C < Tw ≤ −2°C | Nieve húmeda, cristales medianos |
+| **C** | Tw > −2°C (zona marginal) | Nieve marginal |
 
-`models/snowgun_config.py` mapea `GunType → GunSpec` mediante un diccionario simple:
+## 5. Consumo energético
 
-```python
-GUN_CONFIGS: dict[GunType, GunSpec] = {
-    GunType.MONO_FLUID: GunSpec(...),
-    GunType.BI_FLUID: GunSpec(...),
-}
+Se modelan dos consumos independientes:
+
+**Bomba de agua** (siempre presente):
+```
+P_pump = (Q_agua × ΔP) / η_bomba,   η_bomba = 0.75
+```
+donde Q_agua es el caudal en m³/s y ΔP es la presión de trabajo en Pa.
+
+**Compresor de aire** (solo en cañones bi-fluido, que usan aire comprimido):
+```
+P_comp = (Q_aire × P_aire) / η_comp,   η_comp = 0.70
+```
+donde el caudal de aire se aproxima como `0.06 m³/s por cada bar de presión de aire`.
+
+La suma de ambos da la potencia total, y se calcula además una intensidad energética (`kWh por m³ de nieve producida`) para comparar eficiencia entre configuraciones.
+
+## 6. Cómo el SnowEngine encadena todo
+
+El orden importa porque hay dependencias entre pasos. El motor sigue esta secuencia:
+
+```
+1. Clima (T, RH) ────────────► bulbo húmedo (Tw)
+2. Tw ────────────────────────► viabilidad (¿se puede operar?)
+3. Cañón (boquillas, presión) ► producción (caudal, volumen, masa)
+4. Tw ────────────────────────► calidad (grano, densidad, grado)
+5. Cañón + producción ────────► energía (potencia, intensidad)
 ```
 
-Equivalente conceptual a `Record<GunType, GunSpec>` en TypeScript. Hoy la clave es el tipo genérico de cañón (mono/bi-fluid); el diseño está pensado para que el día de mañana la clave pase a ser un modelo específico de fabricante (ej. `"TechnoAlpin TF10"`) **sin tener que tocar `GunSpec`** — solo cambia el diccionario y quién arma las claves.
+Es decir: **Tw se calcula una sola vez** y alimenta tanto a viabilidad como a calidad. Producción depende únicamente del cañón (no del clima). Y energía depende tanto del cañón como del resultado de producción (porque necesita saber cuánta agua se está moviendo para estimar la potencia de bombeo).
 
-De hecho, `presets/technoalpin_tf10.py`, `presets/fan_basic.py` y `presets/lance_basic.py` existen como archivos (hoy vacíos) anticipando ese camino: presets concretos de fabricante que en algún momento poblarán configuraciones más específicas que las genéricas de `snowgun_config.py`.
+Esto explica un comportamiento que puede parecer contraintuitivo: **podés tener alta producción con mala calidad**, si el cañón tiene mucha presión pero el clima está en zona marginal. Producción y calidad son ejes independientes.
 
-## Diagrama de flujo completo
+## 7. Parámetros por tipo de cañón
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                          INPUTS                              │
-│   Weather (temp, humedad)   SnowGun (spec + presiones)       │
-└──────────────┬────────────────────────┬───────────────────────┘
-               ▼                        ▼
-     WetBulbCalculator          ProductionCalculator
-               │                        │
-       ┌───────┴───────┐                │
-       ▼               ▼                ▼
-ViabilityCalculator  QualityCalculator  EnergyCalculator
-       │               │                │
-       └───────┬────────┴────────┬──────┘
-               ▼
-          SnowEngine.simulate()
-               ▼
-        SimulationResult
-               ▼
-        Streamlit UI (app.py)
-```
+Antes de ver los números, una aclaración de terminología: en la industria hay dos clasificaciones distintas de cañones de nieve, y conviene no mezclarlas.
 
-## Por qué esta separación importa
+- **Fan gun vs. lanza (lance/stick)** clasifica **cómo se proyecta** el agua: con ventilador, o aprovechando la altura de una torre estática.
+- **Mono-fluido vs. bi-fluido** clasifica **cómo se atomiza** el agua: solo con presión de agua, o mezclándola con aire comprimido en la boquilla.
 
-- **Testeable**: cada calculator se testea aislado, sin mocks de Streamlit ni de otros calculators (ver `tests/`).
-- **Extensible**: agregar un nuevo calculator (ej. `efficiency.py`) no rompe a los existentes.
-- **Reemplazable**: la fórmula de Stull podría cambiarse por una tabla psicrométrica real sin tocar `viability.py`, `quality.py` ni la UI — todos consumen `wet_bulb: float`, no la fórmula en sí.
+Son ejes independientes — en la realidad existen fan guns mono-fluidos, fan guns bi-fluidos, lanzas mono-fluidas y lanzas bi-fluidas. Este simulador modela únicamente el eje **mono-fluido / bi-fluido** (`GunType` en el código), porque es el que determina el `minimum_wet_bulb` — el umbral climático mínimo para operar cada sistema:
+
+| Parámetro | Mono-fluido | Bi-fluido |
+|---|---|---|
+| Boquillas | 6 | 4 |
+| Altura | 12 m | 8 m |
+| Presión de agua | 20–40 bar | 5–10 bar |
+| Presión de aire | No usa | 4–7 bar |
+| Bulbo húmedo mínimo para operar | −2.5°C | −0.5°C |
+
+El bi-fluido puede operar con condiciones climáticas menos exigentes (−0.5°C vs. −2.5°C) porque la expansión del aire comprimido genera un enfriamiento adicional en el momento de la nucleación, sin depender tanto de que el aire ambiente evapore y enfríe el agua por sí solo. A cambio, consume energía extra en el compresor que el mono-fluido no necesita.
+
+> Si en algún momento el proyecto quisiera modelar también el eje fan gun / lanza (por ejemplo, para variar el alcance o la distribución de la nieve en el terreno), sería un segundo `enum` independiente de `GunType`, no una extensión del mismo — son dos dimensiones distintas del cañón, no una jerarquía.
+
+## Referencias
+
+- Stull, R. (2011). *Wet-Bulb Temperature from Relative Humidity and Air Temperature*. Journal of Applied Meteorology and Climatology.
+- Lavanchy & Brun (2002). *Guns and Snow*.
+- Fierz et al. (2009). *International Classification for Seasonal Snow*.
+- Especificaciones técnicas TechnoAlpin.
+
+---
+
+¿Te interesa cómo está implementado esto en código (carpetas, clases, stack)? Pasá a **Technical**.

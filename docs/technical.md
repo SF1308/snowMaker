@@ -1,15 +1,17 @@
-# Documentación técnica
+# Technical: stack, estructura y cómo correr el proyecto
+
+> Esta página no asume ningún conocimiento sobre nivocultura. Si te interesa el dominio (qué es fabricar nieve, cómo funciona) o el detalle de las fórmulas, ver **Snowmaking** y **Architecture**.
 
 ## Stack
 
 - **Python 3.10+** (usa sintaxis `float | None`, disponible desde 3.10)
-- **Streamlit** — única dependencia externa para la UI
+- **Streamlit** — única dependencia externa, usada solo para la UI
 - **dataclasses** (stdlib) — modelado de datos
 - **math** (stdlib) — funciones trigonométricas de la fórmula de Stull
 
-No hay dependencias de terceros para el motor de cálculo (`calculators/`, `engine/`, `models/`) — solo `app.py` y `ui/` dependen de Streamlit. Esto es intencional: la lógica de dominio queda libre de framework.
+La lógica de dominio (`calculators/`, `engine/`, `models/`) no depende de Streamlit ni de ninguna librería externa — solo `app.py` y `ui/` lo hacen. Esto es intencional: permite testear o reusar el motor de cálculo sin necesidad de levantar una UI.
 
-## Instalación local
+## Instalación y ejecución
 
 ```bash
 git clone <repo-url>
@@ -19,101 +21,167 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install streamlit
 ```
 
+### Correr la app Streamlit
+
+```bash
+python -m streamlit run app.py
+```
+
+Usar `python -m streamlit` en vez de solo `streamlit` evita problemas comunes en Windows cuando el ejecutable de Streamlit no está bien resuelto en el `PATH` — corre el módulo directamente con el intérprete de Python activo, así que siempre usa el mismo entorno virtual que tenés activado.
+
+Abre en `http://localhost:8501` por defecto.
+
 ### Correr el motor por CLI (sin UI)
 
 ```bash
 python main.py
 ```
 
-Calcula el bulbo húmedo para condiciones fijas (hoy hardcodeadas en `main.py`: −5°C, 50% humedad) y lo imprime por consola. Útil para verificar rápido la fórmula de Stull sin levantar el server.
+Calcula el bulbo húmedo para condiciones fijas (hoy hardcodeadas en `main.py`) y lo imprime por consola. Útil para debug rápido de la fórmula sin levantar Streamlit.
 
-### Correr la app Streamlit
-
-```bash
-streamlit run app.py
-```
-
-Abre en `http://localhost:8501` por defecto.
+> ⚠️ Actualmente `main.py` tiene un import roto (ver sección "Known issues" más abajo).
 
 ### Codespaces / Devcontainer
 
-El proyecto incluye `.devcontainer/devcontainer.json` basado en la imagen `python:3.11-bookworm`. Al abrir en GitHub Codespaces:
-- Instala automáticamente `requirements.txt` (si existe) y `streamlit`.
-- Levanta `streamlit run app.py` en el puerto `8501` con auto-forward y preview automático.
+El proyecto incluye `.devcontainer/devcontainer.json` basado en `python:3.11-bookworm`. Al abrir en GitHub Codespaces instala automáticamente dependencias y levanta la app en el puerto `8501` con preview automático.
 
-## Estructura de imports
+## Estructura del proyecto
 
-El proyecto usa imports absolutos desde la raíz (`from models.weather import Weather`, no relativos), excepto dentro de `engine/__init__.py` y `models/__init__.py`, que sí re-exportan con imports relativos (`from .snowEngine import SnowEngine`). Para que esto funcione, siempre correr los comandos (`python main.py`, `streamlit run app.py`) **desde la raíz del proyecto**.
-
-`models/__init__.py` centraliza los exports públicos del paquete:
-
-```python
-from .gun_spec import GunSpec
-from .gun_type import GunType
-from .primitives import Range
-from .snowgun import SnowGun
-from .snowgun_config import GUN_CONFIGS
-from .weather import Weather
+```
+snow-maker-simulator/
+│
+├── models/                     # Datos puros, sin lógica de negocio
+│   ├── weather.py              # Weather: temperature, humidity, wind_speed
+│   ├── snowgun.py              # SnowGun: spec + presiones, valida rangos
+│   ├── gun_spec.py             # GunSpec: config técnica de un tipo de cañón
+│   ├── gun_type.py             # GunType: enum mono_fluid | bi_fluid
+│   ├── primitives.py           # Range: min/max genérico reusable
+│   ├── snowgun_config.py       # GUN_CONFIGS: lookup GunType → GunSpec
+│   └── output/
+│       └── simulation_result.py  # SimulationResult: resultado agregado final
+│
+├── calculators/                 # Un calculator = una pregunta, sin dependencias entre sí
+│   ├── wet_bulb_calculator.py   # ¿Cuál es el bulbo húmedo?
+│   ├── viability.py             # ¿Se puede operar?
+│   ├── production.py            # ¿Cuánta nieve por hora?
+│   ├── quality.py               # ¿Qué calidad de nieve?
+│   ├── energy.py                # ¿Cuánta energía consume?
+│   └── efficiency.py            # (    pendiente)
+│
+├── engine/
+│   ├── snowEngine.py            # SnowEngine.simulate() — orquesta los calculators
+│   └── __init__.py              # re-exporta SnowEngine
+│
+├── presets/                     # Configs específicas de fabricante (  pendiente)
+│   ├── fan_basic.py
+│   ├── lance_basic.py
+│   └── technoalpin_tf10.py
+│
+├── ui/                           # Streamlit — sliders que devuelven modelos de dominio
+│   ├── weather.py                # render_weather() → Weather
+│   └── snowgun.py                # render_snowgun() → SnowGun
+│
+├── docs/                         # Esta documentación
+├── pages/                        # Páginas Streamlit multipage (Snowmaking/Architecture/Technical)
+├── tests/                        # (   pendiente)
+├── app.py                        # Entry point de la UI
+└── main.py                       # Entry point CLI mínimo
 ```
 
-Esto permite `from models import Weather, SnowGun, GUN_CONFIGS` en vez de importar archivo por archivo.
+## Principio de diseño: responsabilidad única por capa
+
+```
+INPUTS (models)  →  CALCULATORS  →  ENGINE  →  RESULT  →  UI (Streamlit)
+```
+
+Cada `calculator` responde **una sola pregunta** y no conoce a los demás. `WetBulbCalculator` no sabe que existe `ViabilityCalculator` — devuelve un `float` y listo. Es `SnowEngine` el único que conoce el orden de dependencias y encadena las salidas de uno como entrada del siguiente:
+
+```python
+wet_bulb   = wet_bulb_calculator.calculate(weather)
+viability  = viability_calculator.calculate(wet_bulb)
+production = production_calculator.calculate(snowgun)
+quality    = quality_calculator.calculate(wet_bulb)
+energy     = energy_calculator.calculate(snowgun, production.water_flow_lpm, production.snow_volume_m3h)
+```
+
+Ventaja práctica: cada calculator se testea aislado, sin mockear Streamlit ni otros calculators. Y la fórmula de Stull podría reemplazarse por una tabla psicrométrica real sin tocar `viability.py`, `quality.py` ni la UI — todos consumen `wet_bulb: float`, no la fórmula en sí.
+
+Del lado de la UI, cada `render_*` de `ui/` devuelve directamente un modelo de dominio (`Weather`, `SnowGun`), no un dict de valores sueltos — `app.py` no conoce sliders ni defaults, solo orquesta. Esto significa que Streamlit se podría reemplazar por otra interfaz (CLI, API REST) reusando el 100% de `models/`, `calculators/` y `engine/`.
+
+## Por qué dataclasses
+
+Todos los modelos son `@dataclass`:
+
+- **Menos boilerplate:** no hace falta escribir `__init__` a mano para clases que son, en esencia, contenedores de datos.
+- **`__eq__` y `__repr__` gratis:** útil para tests y debugging.
+- **Inmutabilidad opcional:** `@dataclass(frozen=True)` en `GunSpec`, `Range` y todos los `*Result` de los calculators — una vez creados, no se pueden mutar por accidente en medio de una simulación.
+- **Validación explícita cuando hace falta:** `SnowGun` es el único modelo no-frozen, porque necesita `__post_init__` para validar que las presiones ingresadas estén dentro del rango permitido por su `GunSpec`. Es lógica de validación, no de cálculo — por eso vive en el modelo y no en un calculator.
+
+## Patrón de configuración: lookup table
+
+`models/snowgun_config.py` mapea `GunType → GunSpec` con un diccionario simple (equivalente a `Record<GunType, GunSpec>` en TypeScript):
+
+```python
+GUN_CONFIGS: dict[GunType, GunSpec] = {
+    GunType.MONO_FLUID: GunSpec(...),
+    GunType.BI_FLUID: GunSpec(...),
+}
+```
+
+Hoy la clave es el tipo genérico de cañón. El diseño anticipa que en el futuro la clave pase a ser un modelo específico de fabricante (ej. `"TechnoAlpin TF10"`) sin tener que tocar `GunSpec` — solo cambia el diccionario. Los archivos vacíos en `presets/` son placeholders para ese camino.
+
+## Imports
+
+El proyecto usa imports absolutos desde la raíz (`from models.weather import Weather`), excepto `engine/__init__.py` y `models/__init__.py`, que re-exportan con imports relativos. Por eso siempre hay que correr los comandos **desde la raíz del proyecto**.
+
+`models/__init__.py` centraliza los exports públicos:
+
+```python
+from models import Weather, SnowGun, GUN_CONFIGS
+```
 
 ## Constantes empíricas por módulo
 
-Centralizado acá para tener una sola referencia rápida de "de dónde sale cada número mágico":
+Referencia rápida de dónde sale cada número mágico usado en los cálculos:
 
-| Constante | Valor | Ubicación | Fuente/origen |
-|---|---|---|---|
-| Coeficientes de Stull | `0.151977`, `8.313659`, `1.676331`, `0.00391838`, `0.023101`, `4.686035` | `wet_bulb_calculator.py` | Stull (2011), ajuste empírico |
-| `THRESHOLD_IMPOSSIBLE` | −2.0 °C | `viability.py` | Umbral industria snowmaking |
-| `THRESHOLD_MARGINAL` | −5.0 °C | `viability.py` | Umbral industria snowmaking |
-| `WATER_DENSITY_KGL` | 1.0 kg/L | `production.py` | Física estándar |
-| `SNOW_DENSITY_KGM3` | 350.0 kg/m³ | `production.py` | Nieve artificial típica |
-| `WATER_TO_SNOW_VOLUME` | 3.0 | `production.py` | Aprox. Lavanchy & Brun (2002) |
-| `NOZZLE_K` | 2.8 | `production.py` | Empírico, L/min por boquilla @ 1 bar |
-| `ETA_PUMP` | 0.75 | `energy.py` | Bomba centrífuga típica |
-| `ETA_COMP` | 0.70 | `energy.py` | Compresor típico |
-| `AIR_FLOW_PER_BAR` | 0.06 m³/s | `energy.py` | Aproximación |
-| Rango tamaño de grano | 0.2–0.8 mm | `quality.py` | Fierz et al. (2009) |
-| Rango densidad de nieve | 280–450 kg/m³ | `quality.py` | Fierz et al. (2009) |
+| Constante | Valor | Ubicación |
+|---|---|---|
+| Coeficientes de Stull | `0.151977`, `8.313659`, `1.676331`, `0.00391838`, `0.023101`, `4.686035` | `wet_bulb_calculator.py` |
+| `THRESHOLD_IMPOSSIBLE` | −2.0 °C | `viability.py` |
+| `THRESHOLD_MARGINAL` | −5.0 °C | `viability.py` |
+| `SNOW_DENSITY_KGM3` | 350.0 kg/m³ | `production.py` |
+| `WATER_TO_SNOW_VOLUME` | 3.0 | `production.py` |
+| `NOZZLE_K` | 2.8 | `production.py` |
+| `ETA_PUMP` | 0.75 | `energy.py` |
+| `ETA_COMP` | 0.70 | `energy.py` |
+| `AIR_FLOW_PER_BAR` | 0.06 m³/s | `energy.py` |
+| Rango tamaño de grano | 0.2–0.8 mm | `quality.py` |
+| Rango densidad de nieve | 280–450 kg/m³ | `quality.py` |
 
-Si estos valores cambian, **modificar solo en el calculator correspondiente** — no hay duplicación en otras capas.
-
-## Validaciones y manejo de errores
-
-`SnowGun.__post_init__` (`models/snowgun.py`) es el único punto de validación de datos de entrada del lado de cañón:
-
-- Rechaza `water_pressure_bar` fuera del rango de `GunSpec.water_pressure` con `ValueError`.
-- Si el `GunSpec` no soporta aire (`air_pressure is None`) pero se pasó `air_pressure_bar`, levanta `ValueError`.
-- Si el `GunSpec` requiere aire y no se pasó `air_pressure_bar`, levanta `ValueError`.
-- Si se pasó aire, valida que esté dentro de rango.
-
-No hay try/except alrededor de la construcción de `SnowGun` en `ui/snowgun.py` — los sliders de Streamlit ya restringen los valores a los rangos válidos de `GunSpec`, por lo que en la práctica el `ValueError` solo se dispararía si se instancia `SnowGun` manualmente (ej. en tests o en `main.py` a futuro) con valores fuera de rango.
+Si estos valores cambian, modificar solo en el calculator correspondiente — no hay duplicación en otras capas.
 
 ## Testing
 
-`tests/` existe con `__init__.py` pero sin tests implementados aún. Dado el diseño desacoplado (cada calculator es una clase con un método `calculate()` sin dependencias externas), el patrón recomendado es:
+`tests/` existe pero está vacío. Dado el diseño desacoplado, el patrón recomendado es testear cada calculator de forma aislada:
 
 ```python
 def test_wet_bulb_matches_known_value():
     weather = Weather(temperature=-5, humidity=50)
     result = WetBulbCalculator().calculate(weather)
-    assert result == pytest.approx(-9.9, abs=0.5)  # verificar contra valor de referencia
+    assert result == pytest.approx(-9.9, abs=0.5)
 ```
 
-Cada calculator puede testearse sin instanciar Streamlit, `SnowGun` completo, ni el `SnowEngine` — solo su propio input mínimo.
+Ningún calculator necesita Streamlit, un `SnowGun` completo, ni el `SnowEngine` para testearse — solo su propio input mínimo.
 
 ## Known issues / deuda técnica
 
-- `main.py` importa `from engine.snowmaking_engine import SnowmakingEngine`, pero el archivo real es `engine/snowEngine.py` con la clase `SnowEngine`. Este import está roto y debe corregirse.
-- `calculators/efficiency.py` está vacío — pendiente de implementación.
-- Los tres archivos en `presets/` (`fan_basic.py`, `lance_basic.py`, `technoalpin_tf10.py`) están vacíos — son placeholders para configuraciones específicas de fabricante mencionadas en `architecture.md`.
-- La fórmula de Stull no corrige por presión atmosférica/altitud (ver `docs/snowmaking.md`).
+- `main.py` importa `from engine.snowmaking_engine import SnowmakingEngine`, pero el archivo real es `engine/snowEngine.py` con la clase `SnowEngine`. El import está roto.
+- `calculators/efficiency.py` está  pendiente de implementación.
+- `presets/fan_basic.py`, `presets/lance_basic.py` y `presets/technoalpin_tf10.py` están vacíos — placeholders intencionales para configuraciones de fabricante específico.
+- La fórmula de Stull no corrige por presión atmosférica/altitud.
 
-## Requisitos para correr en producción / deploy
+## Deploy
 
-Si se despliega en Streamlit Community Cloud u otro hosting compatible:
-
-- Asegurar `requirements.txt` con al menos `streamlit`.
-- El entry point es `app.py` (no `main.py` — ese es solo CLI).
-- Si se agregan las páginas de documentación como multipage (`pages/`), Streamlit las detecta automáticamente sin configuración adicional.
+- Entry point: `app.py` (no `main.py`, que es solo CLI).
+- `requirements.txt` debe incluir al menos `streamlit`.
+- Las páginas en `pages/` son detectadas automáticamente por Streamlit sin configuración adicional.
