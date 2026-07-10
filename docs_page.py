@@ -24,18 +24,26 @@ def init_language_selector():
 
 
 def render_doc_page(md_filename: str, title: str, icon: str = "📄"):
-    init_language_selector()
+    # 1. Configuración de página SIEMPRE primero en producción
     st.set_page_config(page_title=title, page_icon=icon, layout="wide")
 
+    # 2. Inicializar selector
+    init_language_selector()
     lang = st.session_state.selected_lang
 
+    # 3. Asegurar la raíz del proyecto
     project_root = Path(__file__).resolve().parent
-    path = project_root / "docs" / lang / md_filename
+
+    # Limpiamos el md_filename por si acaso le quedó un "docs/" adentro del string anterior
+    clean_filename = Path(md_filename).name
+
+    # Construimos el path de forma ultra segura
+    path = project_root / "docs" / lang / clean_filename
 
     if not path.exists():
-        st.error(
-            f"No se encontró el archivo de documentación: {path.relative_to(project_root)}"
-        )
+        # Usamos path absoluto en el error interno de desarrollo para saber EXACTAMENTE dónde buscó el servidor
+        st.error("No se encontró el archivo de documentación en el servidor.")
+        st.code(f"Buscado en: {path}")
         return
 
     st.markdown(path.read_text(encoding="utf-8"))
