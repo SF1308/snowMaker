@@ -1,6 +1,4 @@
-from engine.snowmaking_engine import SnowmakingEngine
 from models.weather import Weather
-from models.snowgun import SnowGun
 from calculators.wet_bulb_calculator import WetBulbCalculator
 
 
@@ -14,5 +12,3 @@ calculator = WetBulbCalculator()
 wet_bulb = calculator.calculate(weather)
 
 print(wet_bulb)
-
-

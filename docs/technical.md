@@ -5,20 +5,23 @@
 ## Stack
 
 - **Python 3.10+** (usa sintaxis `float | None`, disponible desde 3.10)
-- **Streamlit** — única dependencia externa, usada solo para la UI
+- **Streamlit** — framework de UI
+- **Plotly** — gráficos (gauge de bulbo húmedo, visualizaciones de producción/calidad/energía)
 - **dataclasses** (stdlib) — modelado de datos
 - **math** (stdlib) — funciones trigonométricas de la fórmula de Stull
+
+> 🔧 **Pendiente:** existe un módulo `i18n/` (toggle ES/EN) armado pero todavía no integrado en `app.py`, `ui/weather.py` ni `ui/snowgun.py`. Ver "Known issues" más abajo.
 
 La lógica de dominio (`calculators/`, `engine/`, `models/`) no depende de Streamlit ni de ninguna librería externa — solo `app.py` y `ui/` lo hacen. Esto es intencional: permite testear o reusar el motor de cálculo sin necesidad de levantar una UI.
 
 ## Instalación y ejecución
 
 ```bash
-git clone <repo-url>
-cd snow-maker-simulator
+git clone https://github.com/SF1308/snowMaker
+cd snowMaker
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install streamlit
+pip install -r requirements.txt
 ```
 
 ### Correr la app Streamlit
@@ -66,24 +69,30 @@ snow-maker-simulator/
 │   ├── production.py            # ¿Cuánta nieve por hora?
 │   ├── quality.py               # ¿Qué calidad de nieve?
 │   ├── energy.py                # ¿Cuánta energía consume?
-│   └── efficiency.py            # (    pendiente)
+│   └── efficiency.py            # (vacío — pendiente)
 │
 ├── engine/
 │   ├── snowEngine.py            # SnowEngine.simulate() — orquesta los calculators
 │   └── __init__.py              # re-exporta SnowEngine
 │
-├── presets/                     # Configs específicas de fabricante (  pendiente)
+├── presets/                     # Configs específicas de fabricante (vacío — pendiente)
 │   ├── fan_basic.py
 │   ├── lance_basic.py
 │   └── technoalpin_tf10.py
 │
-├── ui/                           # Streamlit — sliders que devuelven modelos de dominio
+├── ui/                           # Streamlit — inputs que devuelven modelos de dominio
 │   ├── weather.py                # render_weather() → Weather
-│   └── snowgun.py                # render_snowgun() → SnowGun
+│   ├── snowgun.py                # render_snowgun() → SnowGun
+│   ├── charts.py                 # Visualizaciones con Plotly
+│   └── footer.py                 # Footer con links a redes
+│
+├── i18n/                         # Scaffold de traducciones — NO integrado todavía (ver Known issues)
+│   ├── strings.py                # Diccionario de traducciones
+│   └── translator.py             # Helper t() + selector de idioma
 │
 ├── docs/                         # Esta documentación
 ├── pages/                        # Páginas Streamlit multipage (Snowmaking/Architecture/Technical)
-├── tests/                        # (   pendiente)
+├── tests/                        # (vacío — pendiente)
 ├── app.py                        # Entry point de la UI
 └── main.py                       # Entry point CLI mínimo
 ```
@@ -107,6 +116,8 @@ energy     = energy_calculator.calculate(snowgun, production.water_flow_lpm, pro
 Ventaja práctica: cada calculator se testea aislado, sin mockear Streamlit ni otros calculators. Y la fórmula de Stull podría reemplazarse por una tabla psicrométrica real sin tocar `viability.py`, `quality.py` ni la UI — todos consumen `wet_bulb: float`, no la fórmula en sí.
 
 Del lado de la UI, cada `render_*` de `ui/` devuelve directamente un modelo de dominio (`Weather`, `SnowGun`), no un dict de valores sueltos — `app.py` no conoce sliders ni defaults, solo orquesta. Esto significa que Streamlit se podría reemplazar por otra interfaz (CLI, API REST) reusando el 100% de `models/`, `calculators/` y `engine/`.
+
+> Hoy `viability.py` y `quality.py` todavía generan `label`/`description` como texto en español hardcodeado dentro del propio calculator. Cuando se integre `i18n/`, ese texto debería moverse a la capa de presentación (ver Known issues) para que los calculators devuelvan solo códigos (`zone`, `grade`) y queden agnósticos del idioma.
 
 ## Por qué dataclasses
 
@@ -176,12 +187,13 @@ Ningún calculator necesita Streamlit, un `SnowGun` completo, ni el `SnowEngine`
 ## Known issues / deuda técnica
 
 - `main.py` importa `from engine.snowmaking_engine import SnowmakingEngine`, pero el archivo real es `engine/snowEngine.py` con la clase `SnowEngine`. El import está roto.
-- `calculators/efficiency.py` está  pendiente de implementación.
+- `calculators/efficiency.py` está vacío — pendiente de implementación.
 - `presets/fan_basic.py`, `presets/lance_basic.py` y `presets/technoalpin_tf10.py` están vacíos — placeholders intencionales para configuraciones de fabricante específico.
 - La fórmula de Stull no corrige por presión atmosférica/altitud.
+- `i18n/` (toggle ES/EN) está armado (`strings.py`, `translator.py`) pero todavía no integrado — `app.py`, `ui/weather.py` y `ui/snowgun.py` siguen usando strings hardcodeados, y `viability.py`/`quality.py` siguen devolviendo `label`/`description` en español en vez de códigos agnósticos de idioma.
 
 ## Deploy
 
 - Entry point: `app.py` (no `main.py`, que es solo CLI).
-- `requirements.txt` debe incluir al menos `streamlit`.
+- `requirements.txt` debe incluir al menos `streamlit` y `plotly`.
 - Las páginas en `pages/` son detectadas automáticamente por Streamlit sin configuración adicional.
