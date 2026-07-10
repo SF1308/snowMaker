@@ -5,4 +5,5 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from docs_page import render_doc_page
 
-render_doc_page("docs/snowmaking.md", title="Snowmaking", icon="❄️")
+# Pasamos solo el nombre del archivo, la carpeta "docs" y el idioma se manejan internamente
+render_doc_page("snowmaking.md", title="Snowmaking", icon="❄️")
