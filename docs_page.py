@@ -3,16 +3,18 @@ from pathlib import Path
 
 
 def init_language_selector():
-    languages = {"🇪🇸 Español": "es", "🇺🇸 English": "en", "🇨🇦 Català": "ca"}
+    languages = {"🇺🇸 English": "en", "🇪🇸 Español": "es", "🇨🇦 Català": "ca"}
 
-    # Inicializar el estado si no existe
+    # Initialize state if missing — defaults to English to match the
+    # rest of the app on first load. The selector still lets the user
+    # switch to any of the translated docs at any time.
     if "selected_lang" not in st.session_state:
-        st.session_state.selected_lang = "es"
+        st.session_state.selected_lang = "en"
 
-    # Encontrar el índice actual para que el selectbox no se resetee al cambiar de página
+    # Find the current index so the selectbox doesn't reset on page change
     current_index = list(languages.values()).index(st.session_state.selected_lang)
 
-    # Renderizar el selector arriba de todo en el sidebar
+    # Render the selector at the very top of the sidebar
     selected_label = st.sidebar.selectbox(
         "Language / Idioma",
         options=list(languages.keys()),
@@ -24,26 +26,26 @@ def init_language_selector():
 
 
 def render_doc_page(md_filename: str, title: str, icon: str = "📄"):
-    # 1. Configuración de página SIEMPRE primero en producción
+    # 1. Page config ALWAYS first in production
     st.set_page_config(page_title=title, page_icon=icon, layout="wide")
 
-    # 2. Inicializar selector
+    # 2. Initialize selector
     init_language_selector()
     lang = st.session_state.selected_lang
 
-    # 3. Asegurar la raíz del proyecto
+    # 3. Resolve the project root
     project_root = Path(__file__).resolve().parent
 
-    # Limpiamos el md_filename por si acaso le quedó un "docs/" adentro del string anterior
+    # Strip any accidental "docs/" left over in the filename string
     clean_filename = Path(md_filename).name
 
-    # Construimos el path de forma ultra segura
+    # Build the path safely
     path = project_root / "docs" / lang / clean_filename
 
     if not path.exists():
-        # Usamos path absoluto en el error interno de desarrollo para saber EXACTAMENTE dónde buscó el servidor
-        st.error("No se encontró el archivo de documentación en el servidor.")
-        st.code(f"Buscado en: {path}")
+        # Show the absolute path in dev to know exactly where the server looked
+        st.error("Documentation file not found on the server.")
+        st.code(f"Looked in: {path}")
         return
 
     st.markdown(path.read_text(encoding="utf-8"))

@@ -1,16 +1,3 @@
-"""
-ui/tooltips.py
-Tooltip rendering helpers and all tooltip content for the simulator.
-
-Public API
-----------
-TIPS        — dict[str, tuple[str, str]]  key → (title, body)
-tip()       — returns an HTML string: label + hover icon
-metric_card()    — renders a styled card with tooltip into a Streamlit column
-section_header() — renders a section divider with tooltip via st.markdown
-chart_label()    — renders a small label above a chart with tooltip
-"""
-
 import streamlit as st
 
 # ── Icon SVG ───────────────────────────────────────────────────
@@ -65,145 +52,146 @@ def chart_label(label: str, tip_title: str, tip_body: str) -> None:
 # ── Tooltip content ────────────────────────────────────────────
 # Each entry: key → (title, body)
 # Body is plain text; newlines render as-is inside the bubble.
+# This dict is the single place to swap in a translated copy later.
 
 TIPS: dict[str, tuple[str, str]] = {
     # ── Inputs ────────────────────────────────────────────────
-    "temperatura": (
-        "Temperatura del aire (T)",
-        "Temperatura de bulbo seco medida en el ambiente. "
-        "Es la que marca un termómetro convencional. "
-        "Rango operativo típico: −20 °C a +10 °C.",
+    "temperature": (
+        "Air Temperature (T)",
+        "Dry-bulb temperature measured in the environment. "
+        "This is what a regular thermometer reads. "
+        "Typical operating range: −20 °C to +10 °C.",
     ),
-    "humedad": (
-        "Humedad relativa (HR)",
-        "Porcentaje de vapor de agua en el aire respecto al máximo posible a esa temperatura. "
-        "A mayor humedad, menos evaporación del agua atomizada → bulbo húmedo más alto → peor condición para nevar.",
+    "humidity": (
+        "Relative Humidity (RH)",
+        "Percentage of water vapor in the air relative to the maximum possible at that temperature. "
+        "Higher humidity means less evaporation of the atomized water → higher wet bulb → worse snowmaking conditions.",
     ),
-    "viento": (
-        "Velocidad del viento",
-        "Afecta la dispersión de las partículas de nieve y la eficiencia de enfriamiento. "
-        "Vientos fuertes pueden reducir la cobertura del cañón.",
+    "wind": (
+        "Wind Speed",
+        "Affects the dispersion of snow particles and cooling efficiency. "
+        "Strong winds can reduce gun coverage.",
     ),
-    # ── Resultado ─────────────────────────────────────────────
-    "simulacion": (
-        "Simulación",
-        "Resultado calculado en tiempo real por el motor de simulación "
-        "a partir de las condiciones atmosféricas y la configuración del cañón.",
+    # ── Result ────────────────────────────────────────────────
+    "simulation": (
+        "Simulation",
+        "Result calculated in real time by the simulation engine "
+        "from the atmospheric conditions and gun configuration.",
     ),
     "wet_bulb": (
-        "Temperatura de bulbo húmedo (Tw)",
-        "Variable meteorológica clave en la fabricación de nieve. "
-        "Calculada con la fórmula de Stull (2011) a partir de temperatura y humedad. "
-        "Siempre es ≤ temperatura seca. Umbrales: "
-        "Tw > −2 °C → no viable · "
+        "Wet-Bulb Temperature (Tw)",
+        "Key meteorological variable in snowmaking. "
+        "Calculated with the Stull (2011) formula from temperature and humidity. "
+        "Always ≤ dry-bulb temperature. Thresholds: "
+        "Tw > −2 °C → not viable · "
         "−5 °C < Tw ≤ −2 °C → marginal · "
-        "Tw ≤ −5 °C → óptimo.",
+        "Tw ≤ −5 °C → optimal.",
     ),
-    "viabilidad": (
-        "Viabilidad de producción",
-        "Determina si las condiciones permiten producir nieve artificial. "
-        "Se basa exclusivamente en el bulbo húmedo (Tw), no en la temperatura seca. "
-        "Un día frío pero muy húmedo puede ser inviable.",
+    "viability": (
+        "Production Viability",
+        "Determines whether conditions allow artificial snow production. "
+        "Based exclusively on wet-bulb temperature (Tw), not dry-bulb temperature. "
+        "A cold but very humid day can be non-viable.",
     ),
-    # ── Producción ────────────────────────────────────────────
-    "produccion": (
-        "Producción de nieve",
-        "Estimaciones de cuánta agua se consume y cuánta nieve se genera, "
-        "basadas en la presión de agua y el tipo de boquillas del cañón.",
+    # ── Production ────────────────────────────────────────────
+    "production": (
+        "Snow Production",
+        "Estimates of how much water is consumed and how much snow is generated, "
+        "based on water pressure and the gun's nozzle type.",
     ),
-    "caudal": (
-        "Caudal de agua (Q)",
-        "Litros de agua por minuto que fluyen por las boquillas. "
-        "Modelo: Q = K × nozzles × √P, donde K = 2.8, "
-        "nozzles es el número de boquillas y P la presión en bar.",
+    "flow": (
+        "Water Flow (Q)",
+        "Liters of water per minute flowing through the nozzles. "
+        "Model: Q = K × nozzles × √P, where K = 2.8, "
+        "nozzles is the nozzle count and P the pressure in bar.",
     ),
-    "volumen_nieve": (
-        "Volumen de nieve producido",
-        "Metros cúbicos de nieve artificial generados por hora. "
-        "Conversión: 1 L agua → ~3 L de nieve (factor de expansión). "
-        "Densidad asumida: 350 kg/m³.",
+    "snow_volume": (
+        "Snow Volume Produced",
+        "Cubic meters of artificial snow generated per hour. "
+        "Conversion: 1 L water → ~3 L of snow (expansion factor). "
+        "Assumed density: 350 kg/m³.",
     ),
-    "masa_nieve": (
-        "Masa de nieve producida",
-        "Kilogramos de nieve artificial por hora. "
-        "Calculado como: volumen (m³/h) × densidad (350 kg/m³). "
-        "Útil para estimar cobertura de pistas.",
+    "snow_mass": (
+        "Snow Mass Produced",
+        "Kilograms of artificial snow per hour. "
+        "Calculated as: volume (m³/h) × density (350 kg/m³). "
+        "Useful for estimating slope coverage.",
     ),
-    # ── Calidad ───────────────────────────────────────────────
-    "calidad": (
-        "Calidad de nieve",
-        "Estimación de la calidad según la temperatura de bulbo húmedo. "
-        "Modelos empíricos basados en Fierz et al. (2009).",
+    # ── Quality ───────────────────────────────────────────────
+    "quality": (
+        "Snow Quality",
+        "Quality estimate based on wet-bulb temperature. "
+        "Empirical models based on Fierz et al. (2009).",
     ),
-    "grado_calidad": (
-        "Calificación de calidad (A / B / C)",
-        "Evaluación global: "
-        "A → Tw ≤ −5 °C, nieve seca y cristales finos. "
-        "B → −5 °C < Tw ≤ −2 °C, nieve húmeda. "
-        "C → condición marginal.",
+    "quality_grade": (
+        "Quality Grade (A / B / C)",
+        "Overall rating: "
+        "A → Tw ≤ −5 °C, dry snow with fine crystals. "
+        "B → −5 °C < Tw ≤ −2 °C, wet snow. "
+        "C → marginal condition.",
     ),
-    "cristal": (
-        "Tamaño de cristal de nieve",
-        "Diámetro estimado de los granos en mm. "
-        "Modelo: grain = 0.8 − 0.06 × |Tw| (acotado 0.2–0.8 mm). "
-        "Cristales más pequeños → nieve más dura y compactable.",
+    "crystal": (
+        "Snow Crystal Size",
+        "Estimated grain diameter in mm. "
+        "Model: grain = 0.8 − 0.06 × |Tw| (clamped 0.2–0.8 mm). "
+        "Smaller crystals → harder, more compactable snow.",
     ),
-    "densidad": (
-        "Densidad de la nieve",
-        "Masa por unidad de volumen en kg/m³. "
-        "Modelo: densidad = 280 + 12 × |Tw| (acotado 280–450 kg/m³). "
-        "Mayor densidad = nieve más sólida, ideal para pistas de esquí alpino.",
+    "density": (
+        "Snow Density",
+        "Mass per unit volume in kg/m³. "
+        "Model: density = 280 + 12 × |Tw| (clamped 280–450 kg/m³). "
+        "Higher density = firmer snow, ideal for alpine ski slopes.",
     ),
-    # ── Energía ───────────────────────────────────────────────
-    "energia": (
-        "Consumo energético",
-        "Potencia eléctrica estimada del sistema. "
-        "Modelo basado en la ecuación de potencia hidráulica "
-        "con rendimientos típicos de bomba (η = 0.75) y compresor (η = 0.70).",
+    # ── Energy ────────────────────────────────────────────────
+    "energy": (
+        "Energy Consumption",
+        "Estimated electrical power draw of the system. "
+        "Model based on the hydraulic power equation "
+        "with typical pump (η = 0.75) and compressor (η = 0.70) efficiencies.",
     ),
-    "bomba": (
-        "Potencia de la bomba",
-        "Consumo eléctrico estimado de la bomba de agua. "
-        "Modelo: P = (Q × ΔP) / η, con Q en m³/s, ΔP en Pa, η = 0.75. "
-        "Depende directamente de la presión de agua configurada.",
+    "pump": (
+        "Pump Power",
+        "Estimated electrical draw of the water pump. "
+        "Model: P = (Q × ΔP) / η, with Q in m³/s, ΔP in Pa, η = 0.75. "
+        "Depends directly on the configured water pressure.",
     ),
-    "compresor": (
-        "Potencia del compresor",
-        "Solo aplica a cañones bi-fluido (lanza). "
-        "Modelo: P = (Q_aire × P_aire) / η, con η = 0.70 "
-        "y caudal estimado = 0.06 m³/s por bar.",
+    "compressor": (
+        "Compressor Power",
+        "Only applies to bi-fluid (lance) guns. "
+        "Model: P = (Q_air × P_air) / η, with η = 0.70 "
+        "and estimated flow = 0.06 m³/s per bar.",
     ),
-    "potencia_total": (
-        "Potencia total del sistema",
-        "Suma de bomba + compresor (si aplica). "
-        "Representa el consumo eléctrico real del cañón en operación.",
+    "total_power": (
+        "Total System Power",
+        "Sum of pump + compressor (if applicable). "
+        "Represents the actual electrical draw of the gun in operation.",
     ),
-    "intensidad_energetica": (
-        "Intensidad energética",
-        "Kilowatios-hora consumidos por metro cúbico de nieve producido (kWh/m³). "
-        "Mide la eficiencia energética de la operación. "
-        "Valores típicos: 2–6 kWh/m³ para cañones modernos.",
+    "energy_intensity": (
+        "Energy Intensity",
+        "Kilowatt-hours consumed per cubic meter of snow produced (kWh/m³). "
+        "Measures the energy efficiency of the operation. "
+        "Typical values: 2–6 kWh/m³ for modern guns.",
     ),
-    # ── Gráficos ──────────────────────────────────────────────
+    # ── Charts ────────────────────────────────────────────────
     "chart_gauge": (
-        "Gauge de bulbo húmedo",
-        "Visualiza la temperatura de bulbo húmedo sobre los tres rangos operativos. "
-        "Verde: óptimo (≤ −5 °C) · Amarillo: marginal · Rojo: no viable (> −2 °C).",
+        "Wet-Bulb Gauge",
+        "Visualizes wet-bulb temperature across the three operating ranges. "
+        "Green: optimal (≤ −5 °C) · Yellow: marginal · Red: not viable (> −2 °C).",
     ),
     "chart_prod": (
-        "Barras de producción",
-        "Compara las tres métricas de producción en sus unidades naturales: "
-        "caudal (L/min), volumen (m³/h) y masa (kg/h). Las escalas son independientes.",
+        "Production Bars",
+        "Compares the three production metrics in their natural units: "
+        "flow (L/min), volume (m³/h) and mass (kg/h). Scales are independent.",
     ),
     "chart_radar": (
-        "Radar de calidad",
-        "Normaliza tres atributos a escala 0–100 para comparación visual. "
-        "Tamaño de cristal está invertido: más área = cristales más pequeños (mejor). "
-        "Mayor área total indica mejor calidad de nieve.",
+        "Quality Radar",
+        "Normalizes two attributes to their real scales for visual comparison. "
+        "Crystal size is inverted: smaller crystals are better. "
+        "Bars closer to the green end indicate better snow quality.",
     ),
     "chart_pie": (
-        "Distribución de consumo",
-        "Desglosa la potencia total entre bomba y compresor (si hay). "
-        "El número central es la potencia total en kW.",
+        "Consumption Breakdown",
+        "Breaks down total power between pump and compressor (if any). "
+        "The center number is the total power in kW.",
     ),
 }

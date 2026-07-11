@@ -5,201 +5,221 @@ from ui.footer import render_footer
 from ui.weather import render_weather
 from ui.snowgun import render_snowgun
 from ui.styles import inject
-from ui.tooltips import TIPS, tip, metric_card, section_header, chart_label
+from ui.tooltips import TIPS, chart_label
 from ui.charts import wet_bulb_gauge, production_bar, quality_bars, energy_pie
+from ui.simulation import (
+    render_start_button,
+    run_simulation_sequence,
+    render_status_card,
+    render_results_dashboard,
+)
+
+# All page-level text lives here. A future i18n layer only needs to
+# swap this dict — the layout/logic below never changes.
+STRINGS = {
+    "page_title": "Snow Maker Simulator",
+    "heading": "# ❄️ SNOW MAKER SIMULATOR",
+    "subtitle": "Physics-based artificial snow production engine · Stull (2011) wet-bulb model",
+    "sidebar_sim_title": "#### 🎮 You are on: Simulator",
+    "sidebar_sim_caption": (
+        "Configure weather and gun, then press "
+        "**❄️ Start Simulation** to see the results."
+    ),
+    "sidebar_docs_title": "#### 📚 Documentation",
+    "sidebar_docs_caption": (
+        "The other pages in the menu above (Snowmaking, Architecture, "
+        "Technical) are reference guides for the project — they are "
+        "not part of the simulator."
+    ),
+    "section_start": "// 1. Start Simulation",
+    "section_weather": "// 2. Weather Conditions",
+    "section_snowgun": "// 3. Snow Gun Configuration",
+    "section_progress": "// 4. Simulation Progress",
+    "section_results": "// 5. Simulation Results",
+    "tabs": ["📋  Dashboard", "📊  Charts"],
+    "no_snow_warning": (
+        "⚠ Current conditions do not allow artificial snow production.<br>"
+        "Lower the temperature or relative humidity to enable operation."
+    ),
+    "no_snow_charts_note": "⚠ No production — the other charts activate when Tw ≤ −2 °C.",
+    "empty_state_hint": (
+        "Adjust the weather and gun parameters, then press "
+        "**❄️ START SNOWMAKING** to run the simulation."
+    ),
+    "chart_labels": {
+        "wet_bulb": "Wet Bulb Temperature",
+        "production": "Hourly Production",
+        "quality": "Snow Quality",
+        "energy": "Consumption Breakdown",
+    },
+    "footer_note": (
+        "Wet-bulb model: Stull (2011) · "
+        "Artificial snow density: 350 kg/m³ · "
+        "Pump efficiency η=0.75 · "
+        "Estimated values — do not use for critical operations"
+    ),
+}
 
 # ── Page config ────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Snow Maker Simulator",
+    page_title=STRINGS["page_title"],
     page_icon="❄️",
     layout="wide",
 )
 inject()
 
+# ── Sidebar legend ─────────────────────────────────────────────
+# Streamlit renders the auto-generated page navigation (this app +
+# everything in pages/) at the very top of the sidebar, above anything
+# we add here. This block acts as a caption/legend right below it so
+# it's clear which entry is the simulator and which are documentation.
+with st.sidebar:
+    st.markdown("---")
+    st.markdown(STRINGS["sidebar_sim_title"])
+    st.caption(STRINGS["sidebar_sim_caption"])
+    st.markdown(STRINGS["sidebar_docs_title"])
+    st.caption(STRINGS["sidebar_docs_caption"])
+
+# ── Session state ──────────────────────────────────────────────
+# The simulation no longer runs on every widget change. Inputs are
+# only "committed" and simulated when the user presses the CTA button.
+st.session_state.setdefault("result", None)
+st.session_state.setdefault("simulating", False)
+st.session_state.setdefault("pending_weather", None)
+st.session_state.setdefault("pending_snowgun", None)
+
 # ── Title ──────────────────────────────────────────────────────
-st.markdown("# ❄️ SNOW MAKER SIMULATOR")
+st.markdown(STRINGS["heading"])
 st.markdown(
-    '<p class="mono">Physics-based artificial snow production engine · Stull (2011) wet-bulb model</p>',
+    f'<p class="mono">{STRINGS["subtitle"]}</p>',
     unsafe_allow_html=True,
 )
 st.markdown("---")
 
-# ── Inputs ─────────────────────────────────────────────────────
+# ── 1. Start simulation (top CTA) ─────────────────────────────
+st.markdown(
+    f'<p class="section-header">{STRINGS["section_start"]}</p>',
+    unsafe_allow_html=True,
+)
+
+cta_col, _spacer_l, _spacer_r = st.columns([2, 1, 1])
+with cta_col:
+    top_start_clicked = render_start_button()
+
+st.markdown("---")
+
+# ── 2. Weather + Snowgun — single row, two columns ─────────────
 left_col, right_col = st.columns(2, gap="large")
 
 with left_col:
     st.markdown(
-        '<p class="section-header">// Condiciones atmosféricas</p>',
+        f'<p class="section-header">{STRINGS["section_weather"]}</p>',
         unsafe_allow_html=True,
     )
     weather = render_weather()
 
 with right_col:
     st.markdown(
-        '<p class="section-header">// Configuración del cañón</p>',
+        f'<p class="section-header">{STRINGS["section_snowgun"]}</p>',
         unsafe_allow_html=True,
     )
     snowgun = render_snowgun()
 
 st.markdown("---")
 
-# ── Simulation ─────────────────────────────────────────────────
-result = SnowEngine().simulate(weather=weather, snowgun=snowgun)
-v = result.viability
-p = result.production
-q = result.quality
-e = result.energy
+if top_start_clicked and not st.session_state.simulating:
+    # Snapshot the current inputs so the animation/calc use exactly
+    # what the user had configured at the moment of the click.
+    st.session_state.pending_weather = weather
+    st.session_state.pending_snowgun = snowgun
+    st.session_state.simulating = True
+    st.rerun()
 
-# ── Status row ─────────────────────────────────────────────────
-section_header("// Resultado de la simulación", *TIPS["simulacion"])
-
-status_col, wb_col, desc_col = st.columns([1, 1, 2], gap="large")
-
-with status_col:
-    st.markdown(tip("Estado", *TIPS["viabilidad"]), unsafe_allow_html=True)
+# ── 4. Simulation progress ────────────────────────────────────
+if st.session_state.simulating:
     st.markdown(
-        f'<div class="status-{v.zone}">{v.label.upper()}</div>', unsafe_allow_html=True
+        f'<p class="section-header">{STRINGS["section_progress"]}</p>',
+        unsafe_allow_html=True,
     )
-
-with wb_col:
-    metric_card(
-        wb_col, "Bulbo Húmedo (Tw)", f"{result.wet_bulb:.2f} °C", *TIPS["wet_bulb"]
+    result = run_simulation_sequence(
+        SnowEngine(),
+        st.session_state.pending_weather,
+        st.session_state.pending_snowgun,
     )
+    st.session_state.result = result
+    st.session_state.simulating = False
+    st.rerun()
 
-with desc_col:
+# ── 5. Results ─────────────────────────────────────────────────
+result = st.session_state.result
+
+if result is not None:
+    v = result.viability
+    p = result.production
+    q = result.quality
+    e = result.energy
+
+    st.markdown("---")
     st.markdown(
-        f'<p class="mono" style="margin-top:2rem">{v.description}</p>',
+        f'<p class="section-header">{STRINGS["section_results"]}</p>',
         unsafe_allow_html=True,
     )
 
-st.markdown("---")
+    render_status_card(result)
 
-# ── Tabs ───────────────────────────────────────────────────────
-metrics_tab, charts_tab = st.tabs(["📋  Métricas", "📊  Gráficos"])
+    metrics_tab, charts_tab = st.tabs(STRINGS["tabs"])
 
-# ── Metrics tab ────────────────────────────────────────────────
-with metrics_tab:
-    if not v.can_make_snow:
-        st.markdown(
-            '<p class="mono" style="color:#f85149; padding: 2rem 0;">'
-            "⚠ Las condiciones actuales no permiten producción de nieve artificial.<br>"
-            "Reducir la temperatura o la humedad relativa para habilitar la operación.</p>",
-            unsafe_allow_html=True,
-        )
-    else:
-        # Production
-        section_header("// Producción", *TIPS["produccion"])
-        c1, c2, c3 = st.columns(3)
-        metric_card(
-            c1, "Caudal de agua", f"{p.water_flow_lpm:.1f} L/min", *TIPS["caudal"]
-        )
-        metric_card(
-            c2,
-            "Volumen de nieve",
-            f"{p.snow_volume_m3h:.2f} m³/h",
-            *TIPS["volumen_nieve"],
-        )
-        metric_card(
-            c3, "Masa de nieve", f"{p.snow_mass_kgh:.0f} kg/h", *TIPS["masa_nieve"]
-        )
-
-        st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
-        st.markdown("---")
-
-        q_col, e_col = st.columns(2, gap="large")
-
-        # Quality
-        with q_col:
-            section_header("// Calidad de nieve", *TIPS["calidad"])
-            grade_class = f"grade-{q.grade}" if q.grade != "—" else "grade-none"
+    # ── Metrics tab ────────────────────────────────────────────
+    with metrics_tab:
+        if not v.can_make_snow:
             st.markdown(
-                tip("Calificación", *TIPS["grado_calidad"]), unsafe_allow_html=True
-            )
-            st.markdown(
-                f'<span class="grade-badge {grade_class}">{q.grade}</span>',
+                f'<p class="mono" style="color:#f85149; padding: 2rem 0;">'
+                f"{STRINGS['no_snow_warning']}</p>",
                 unsafe_allow_html=True,
             )
-            st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
-            qc1, qc2 = st.columns(2)
-            metric_card(
-                qc1, "Tamaño de cristal", f"{q.grain_size_mm:.2f} mm", *TIPS["cristal"]
-            )
-            metric_card(
-                qc2, "Densidad", f"{q.density_kgm3:.0f} kg/m³", *TIPS["densidad"]
-            )
-            st.markdown(
-                f'<p class="mono" style="margin-top:0.6rem">{q.description}</p>',
-                unsafe_allow_html=True,
-            )
+        else:
+            render_results_dashboard(result)
 
-        # Energy
-        with e_col:
-            section_header("// Consumo energético", *TIPS["energia"])
-            ec1, ec2 = st.columns(2)
-            metric_card(
-                ec1, "Potencia bomba", f"{e.pump_power_kw:.2f} kW", *TIPS["bomba"]
-            )
-            if e.compressor_power_kw > 0:
-                metric_card(
-                    ec2,
-                    "Potencia compresor",
-                    f"{e.compressor_power_kw:.2f} kW",
-                    *TIPS["compresor"],
+    # ── Charts tab ─────────────────────────────────────────────
+    with charts_tab:
+        cl = STRINGS["chart_labels"]
+        if not v.can_make_snow:
+            g_col, _ = st.columns([1, 1])
+            with g_col:
+                chart_label(cl["wet_bulb"], *TIPS["chart_gauge"])
+                st.plotly_chart(
+                    wet_bulb_gauge(result.wet_bulb), use_container_width=True
                 )
-            else:
-                metric_card(ec2, "Compresor", "N/A", *TIPS["compresor"])
-            st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
-            ec3, ec4 = st.columns(2)
-            metric_card(
-                ec3,
-                "Potencia total",
-                f"{e.total_power_kw:.2f} kW",
-                *TIPS["potencia_total"],
+            st.markdown(
+                f'<p class="mono" style="color:#f85149; padding: 1rem 0;">'
+                f"{STRINGS['no_snow_charts_note']}</p>",
+                unsafe_allow_html=True,
             )
-            metric_card(
-                ec4,
-                "Intensidad",
-                f"{e.kwh_per_m3_snow:.2f} kWh/m³",
-                *TIPS["intensidad_energetica"],
-            )
+        else:
+            gauge_col, prod_col = st.columns(2, gap="large")
+            with gauge_col:
+                chart_label(cl["wet_bulb"], *TIPS["chart_gauge"])
+                st.plotly_chart(
+                    wet_bulb_gauge(result.wet_bulb), use_container_width=True
+                )
+            with prod_col:
+                chart_label(cl["production"], *TIPS["chart_prod"])
+                st.plotly_chart(production_bar(p), use_container_width=True)
 
-# ── Charts tab ─────────────────────────────────────────────────
-with charts_tab:
-    if not v.can_make_snow:
-        g_col, _ = st.columns([1, 1])
-        with g_col:
-            chart_label("Temperatura de bulbo húmedo", *TIPS["chart_gauge"])
-            st.plotly_chart(wet_bulb_gauge(result.wet_bulb), use_container_width=True)
-        st.markdown(
-            '<p class="mono" style="color:#f85149; padding: 1rem 0;">'
-            "⚠ Sin producción — los demás gráficos se activan cuando Tw ≤ −2 °C.</p>",
-            unsafe_allow_html=True,
-        )
-    else:
-        gauge_col, prod_col = st.columns(2, gap="large")
-        with gauge_col:
-            chart_label("Temperatura de bulbo húmedo", *TIPS["chart_gauge"])
-            st.plotly_chart(wet_bulb_gauge(result.wet_bulb), use_container_width=True)
-        with prod_col:
-            chart_label("Producción horaria", *TIPS["chart_prod"])
-            st.plotly_chart(production_bar(p), use_container_width=True)
-
-        qual_col, ener_col = st.columns(2, gap="large")
-        with qual_col:
-            chart_label("Calidad de nieve", *TIPS["chart_radar"])
-            st.plotly_chart(quality_bars(q), use_container_width=True)
-        with ener_col:
-            chart_label("Distribución de consumo", *TIPS["chart_pie"])
-            st.plotly_chart(energy_pie(e), use_container_width=True)
+            qual_col, ener_col = st.columns(2, gap="large")
+            with qual_col:
+                chart_label(cl["quality"], *TIPS["chart_radar"])
+                st.plotly_chart(quality_bars(q), use_container_width=True)
+            with ener_col:
+                chart_label(cl["energy"], *TIPS["chart_pie"])
+                st.plotly_chart(energy_pie(e), use_container_width=True)
+else:
+    st.info(STRINGS["empty_state_hint"])
 
 # ── Footer ─────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown(
-    '<p class="mono" style="font-size:0.7rem">'
-    "Modelo de bulbo húmedo: Stull (2011) · "
-    "Densidad de nieve artificial: 350 kg/m³ · "
-    "Rendimiento de bomba η=0.75 · "
-    "Valores estimados — no usar para operaciones críticas</p>",
+    f'<p class="mono" style="font-size:0.7rem">{STRINGS["footer_note"]}</p>',
     unsafe_allow_html=True,
 )
 

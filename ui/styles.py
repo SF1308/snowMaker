@@ -15,7 +15,10 @@ html, body, [class*="css"] {
 }
 
 .stApp {
-    background-color: #0d1117;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(88,166,255,0.06), transparent 40%),
+        radial-gradient(circle at 85% 10%, rgba(63,185,80,0.05), transparent 35%),
+        #0d1117;
     color: #e6edf3;
 }
 
@@ -145,11 +148,160 @@ hr { border-color: #21262d !important; }
 .metric-card {
     background: #161b22; border: 1px solid #30363d;
     border-radius: 6px; padding: 1rem 1.2rem;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.metric-card:hover {
+    border-color: #58a6ff;
+    transform: translateY(-2px);
 }
 .metric-value {
     font-family: 'Share Tech Mono', monospace;
     font-size: 1.8rem; color: #58a6ff;
     margin: 4px 0 0 0; line-height: 1.1;
+}
+
+/* ── Fade-in micro-interaction ─────────────────────────────── */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+    animation: fadeInUp 0.45s ease both;
+}
+
+/* ── Start Snowmaking CTA button ──────────────────────────────
+   Streamlit renders st.button as a <button> inside
+   [data-testid="stButton"]; type="primary" gets a distinct class
+   we can target broadly via the wrapper below.                 */
+.start-btn-wrap { margin: 0.5rem 0 1.2rem 0; }
+
+.start-btn-wrap [data-testid="stButton"] button {
+    background: linear-gradient(135deg, #1f6feb 0%, #388bfd 100%);
+    color: #ffffff;
+    border: 1px solid #58a6ff;
+    border-radius: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.05rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 4px 18px rgba(31, 111, 235, 0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+.start-btn-wrap [data-testid="stButton"] button:hover:enabled {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 26px rgba(31, 111, 235, 0.5);
+    filter: brightness(1.08);
+}
+.start-btn-wrap [data-testid="stButton"] button:active:enabled {
+    transform: translateY(0px);
+}
+.start-btn-wrap [data-testid="stButton"] button:disabled {
+    background: #21262d;
+    color: #8b949e;
+    border-color: #30363d;
+    box-shadow: none;
+    opacity: 0.8;
+}
+
+/* ── Simulation sequence step text ────────────────────────────*/
+.sim-step {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.95rem;
+    color: #79c0ff;
+    background: #0d1526;
+    border: 1px solid #1c2e4a;
+    border-radius: 6px;
+    padding: 0.85rem 1.1rem;
+    margin: 0.6rem 0;
+    letter-spacing: 0.03em;
+    animation: pulseStep 1.1s ease-in-out infinite;
+}
+.sim-step-icon { margin-right: 0.5rem; }
+
+@keyframes pulseStep {
+    0%, 100% { opacity: 0.75; }
+    50%      { opacity: 1; }
+}
+
+/* ── Overall status card ──────────────────────────────────────*/
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 1.1rem;
+    border-radius: 10px;
+    padding: 1.2rem 1.5rem;
+    margin: 0.5rem 0 1.5rem 0;
+    border: 1px solid #30363d;
+}
+.status-card-icon { font-size: 2.2rem; line-height: 1; }
+.status-card-title {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.3rem;
+}
+.status-card-desc {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.88rem;
+    color: #c9d1d9;
+    line-height: 1.4;
+}
+
+.status-card-optimal {
+    background: linear-gradient(135deg, #0d2b18, #0d4429);
+    border-color: #238636;
+}
+.status-card-optimal .status-card-title { color: #3fb950; }
+
+.status-card-marginal {
+    background: linear-gradient(135deg, #241500, #2d1a00);
+    border-color: #9e6a03;
+}
+.status-card-marginal .status-card-title { color: #d29922; }
+
+.status-card-impossible {
+    background: linear-gradient(135deg, #240a0a, #2d0d0d);
+    border-color: #8b1a1a;
+}
+.status-card-impossible .status-card-title { color: #f85149; }
+
+/* ── Results dashboard info cards ─────────────────────────────*/
+.info-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+    margin-bottom: 1rem;
+    min-height: 118px;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.info-card:hover {
+    border-color: #58a6ff;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+}
+.info-card-icon { font-size: 1.4rem; margin-bottom: 0.35rem; }
+.info-card-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8b949e;
+    margin-bottom: 0.25rem;
+}
+.info-card-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.55rem;
+    color: #58a6ff;
+    line-height: 1.15;
+}
+.info-card-sub {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.76rem;
+    color: #8b949e;
+    margin-top: 0.3rem;
+    line-height: 1.35;
 }
 </style>
 """
